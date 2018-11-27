@@ -319,7 +319,7 @@ func (g *Generator) trimValueNames(values []Value, prefix string) {
 // generate produces the String method for the named type.
 func (g *Generator) generate(typeName string, includeJSON, includeYAML, includeSQL, includeText bool,
 	transformMethod string, trimPrefix string, ignoreCase bool, numeric bool, empty string) {
-	values := make([]Value, 0, 100)
+	values := []Value{}
 	for _, file := range g.pkg.files {
 		// Set the state for this run of the walker.
 		file.typeName = typeName
@@ -351,15 +351,8 @@ func (g *Generator) generate(typeName string, includeJSON, includeYAML, includeS
 	// being necessary for any realistic example other than bitmasks
 	// is very low. And bitmasks probably deserve their own analysis,
 	// to be done some other day.
-	const runsThreshold = 10
-	switch {
-	case len(runs) == 1:
-		g.buildOneRun(runs, typeName)
-	case len(runs) <= runsThreshold:
-		g.buildMultipleRuns(runs, typeName)
-	default:
-		g.buildMap(runs, typeName)
-	}
+	const runsThreshold = 1
+	g.buildMap(runs, typeName)
 
 	if ignoreCase {
 		if transformMethod == "upper" || transformMethod == "snakeu" || transformMethod == "kebabu" {
