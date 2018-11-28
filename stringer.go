@@ -651,15 +651,7 @@ func (g *Generator) buildMap(runs [][]Value, typeName string, ignoreCase bool) {
 	if ignoreCase {
 		g.Printf("\n")
 		g.declareNameVars(runs, typeName, "", true)
-		g.Printf("\nvar _%sMapLowercase = map[%s]string{\n", typeName, typeName)
-		n := 0
-		for _, values := range runs {
-			for _, value := range values {
-				g.Printf("\t%s: _%sNameLowercase[%d:%d],\n", &value, typeName, n, n+len(value.name))
-				n += len(value.name)
-			}
-		}
-		g.Printf("}\n\n")
+		// no map is needed
 	} else {
 		g.Printf("\n")
 		g.declareNameVars(runs, typeName, "", false)

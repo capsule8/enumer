@@ -5,36 +5,36 @@ import "fmt"
 // Arguments to format are:
 //	[1]: type name
 //      [2]: numeric value check code (or "")
-const stringNameToValueMethod = `// %[1]sString retrieves an enum value from the enum constants string name.
+const stringNameToValueMethod = `// %[1]sFromString retrieves an enum value from the enum constants string name.
 // Throws an error if the param is not part of the enum.
-func %[1]sString(s string) (%[1]s, error) {
+func %[1]sFromString(s string) (%[1]s, error) {
         if val, ok := _%[1]sNameToValueMap[s]; ok {
                 return val, nil
         }%[2]s
         return 0, fmt.Errorf("%%s does not belong to %[1]s values", s)
 }
 `
-const stringIgnoreCaseNameToValueMethod = `// %[1]sString retrieves an enum value from the enum constants string name.
+const stringIgnoreCaseNameToValueMethod = `// %[1]sFromString retrieves an enum value from the enum constants string name.
 // Throws an error if the param is not part of the enum.
-func %[1]sString(s string) (%[1]s, error) {
+func %[1]sFromString(s string) (%[1]s, error) {
         if val, ok := _%[1]sNameToValueMapLowercase[strings.ToLower(s)]; ok {
                 return val, nil
         }
         return 0, fmt.Errorf("%%s does not belong to %[1]s values", s)
 }
 `
-const stringUpperNameToValueMethod = `// %[1]sString retrieves an enum value from the enum constants string name.
+const stringUpperNameToValueMethod = `// %[1]sFromString retrieves an enum value from the enum constants string name.
 // Throws an error if the param is not part of the enum.
-func %[1]sString(s string) (%[1]s, error) {
+func %[1]sFromString(s string) (%[1]s, error) {
         if val, ok := _%[1]sNameToValueMap[strings.ToUpper(s)]; ok {
                 return val, nil
         }%[2]s
         return 0, fmt.Errorf("%%s does not belong to %[1]s values", s)
 }
 `
-const stringLowerNameToValueMethod = `// %[1]sString retrieves an enum value from the enum constants string name.
+const stringLowerNameToValueMethod = `// %[1]sFromString retrieves an enum value from the enum constants string name.
 // Throws an error if the param is not part of the enum.
-func %[1]sString(s string) (%[1]s, error) {
+func %[1]sFromString(s string) (%[1]s, error) {
         if val, ok := _%[1]sNameToValueMap[strings.ToLower(s)]; ok {
                 return val, nil
         }%[2]s
@@ -205,7 +205,7 @@ func (i %[1]s) MarshalText() ([]byte, error) {
 // UnmarshalText implements the encoding.TextUnmarshaler interface for %[1]s
 func (i *%[1]s) UnmarshalText(text []byte) error {
 	var err error
-	*i, err = %[1]sString(string(text))
+	*i, err = %[1]sFromString(string(text))
 	return err
 }
 `
