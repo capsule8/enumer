@@ -17,14 +17,9 @@ func %[1]sString(s string) (%[1]s, error) {
 const stringIgnoreCaseNameToValueMethod = `// %[1]sString retrieves an enum value from the enum constants string name.
 // Throws an error if the param is not part of the enum.
 func %[1]sString(s string) (%[1]s, error) {
-        if val, ok := _%[1]sNameToValueMap[s]; ok {
+        if val, ok := _%[1]sNameToValueMapLowercase[strings.ToLower(s)]; ok {
                 return val, nil
         }
-        for k, v := range _%[1]sNameToValueMap {
-                if strings.EqualFold(s, k) {
-                        return v, nil
-                }
-        }%[2]s
         return 0, fmt.Errorf("%%s does not belong to %[1]s values", s)
 }
 `
@@ -93,7 +88,7 @@ func (i %[1]s) IsA%[1]s() bool {
 //	[1]: type name
 const stringBelongsMethodSet = `// IsA%[1]s returns "true" if the value is listed in the enum definition. "false" otherwise
 func (i %[1]s) IsA%[1]s() bool {
-	_, ok := _%[1]sMap[i] 
+	_, ok := _%[1]sMap[i]
 	return ok
 }
 `
@@ -129,6 +124,26 @@ func (g *Generator) buildBasicExtras(runs [][]Value, typeName string, runsThresh
 		}
 	}
 	g.Printf("}\n\n")
+	if ignoreCase == CaseMixed {
+		g.Printf("\nvar _%sNameToValueMapLowercase = map[string]%s{\n", typeName, typeName)
+		thereAreRuns := len(runs) > 1 && len(runs) <= runsThreshold
+		var n int
+		var runID string
+		for i, values := range runs {
+			if thereAreRuns {
+				runID = "_" + fmt.Sprintf("%d", i)
+				n = 0
+			} else {
+				runID = ""
+			}
+
+			for _, value := range values {
+				g.Printf("\t_%sNameLowercase%s[%d:%d]: %s,\n", typeName, runID, n, n+len(value.name), &value)
+				n += len(value.name)
+			}
+		}
+		g.Printf("}\n\n")
+	}
 
 	// Print the basic extra methods
 	numCheck := ""

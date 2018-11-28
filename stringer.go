@@ -339,20 +339,11 @@ func (g *Generator) generate(typeName string, includeJSON, includeYAML, includeS
 	g.transformValueNames(values, transformMethod, empty)
 
 	runs := splitIntoRuns(values)
-	// The decision of which pattern to use depends on the number of
-	// runs in the numbers. If there's only one, it's easy. For more than
-	// one, there's a tradeoff between complexity and size of the data
-	// and code vs. the simplicity of a map. A map takes more space,
-	// but so does the code. The decision here (crossover at 10) is
-	// arbitrary, but considers that for large numbers of runs the cost
-	// of the linear scan in the switch might become important, and
-	// rather than use yet another algorithm such as binary search,
-	// we punt and use a map. In any case, the likelihood of a map
-	// being necessary for any realistic example other than bitmasks
-	// is very low. And bitmasks probably deserve their own analysis,
-	// to be done some other day.
 	const runsThreshold = 1
-	g.buildMap(runs, typeName)
+	g.buildMap(runs, typeName, false)
+	if ignoreCase {
+		g.buildMap(runs, typeName, true)
+	}
 
 	if ignoreCase {
 		if transformMethod == "upper" || transformMethod == "snakeu" || transformMethod == "kebabu" {
@@ -551,10 +542,10 @@ func usize(n int) int {
 
 // declareIndexAndNameVars declares the index slices and concatenated names
 // strings representing the runs of values.
-func (g *Generator) declareIndexAndNameVars(runs [][]Value, typeName string) {
+func (g *Generator) declareIndexAndNameVars(runs [][]Value, typeName string, lowercase bool) {
 	var indexes, names []string
 	for i, run := range runs {
-		index, name := g.createIndexAndNameDecl(run, typeName, fmt.Sprintf("_%d", i))
+		index, name := g.createIndexAndNameDecl(run, typeName, fmt.Sprintf("_%d", i), lowercase)
 		indexes = append(indexes, index)
 		names = append(names, name)
 	}
@@ -571,21 +562,26 @@ func (g *Generator) declareIndexAndNameVars(runs [][]Value, typeName string) {
 }
 
 // declareIndexAndNameVar is the single-run version of declareIndexAndNameVars
-func (g *Generator) declareIndexAndNameVar(run []Value, typeName string) {
-	index, name := g.createIndexAndNameDecl(run, typeName, "")
+func (g *Generator) declareIndexAndNameVar(run []Value, typeName string, lowercase bool) {
+	index, name := g.createIndexAndNameDecl(run, typeName, "", lowercase)
 	g.Printf("const %s\n", name)
 	g.Printf("var %s\n", index)
 }
 
 // createIndexAndNameDecl returns the pair of declarations for the run. The caller will add "const" and "var".
-func (g *Generator) createIndexAndNameDecl(run []Value, typeName string, suffix string) (string, string) {
+func (g *Generator) createIndexAndNameDecl(run []Value, typeName string, suffix string, lowercase bool) (string, string) {
 	b := new(bytes.Buffer)
 	indexes := make([]int, len(run))
 	for i := range run {
 		b.WriteString(run[i].name)
 		indexes[i] = b.Len()
 	}
-	nameConst := fmt.Sprintf("_%sName%s = %q", typeName, suffix, b.String())
+	var nameConst string
+	if lowercase {
+		nameConst = fmt.Sprintf("_%sNameLowercase%s = %q", typeName, suffix, strings.ToLower(b.String()))
+	} else {
+		nameConst = fmt.Sprintf("_%sName%s = %q", typeName, suffix, b.String())
+	}
 	nameLen := b.Len()
 	b.Reset()
 	fmt.Fprintf(b, "_%sIndex%s = [...]uint%d{0, ", typeName, suffix, usize(nameLen))
@@ -596,35 +592,29 @@ func (g *Generator) createIndexAndNameDecl(run []Value, typeName string, suffix 
 		fmt.Fprintf(b, "%d", v)
 	}
 	fmt.Fprintf(b, "}")
+	if lowercase {
+		return strings.ToLower(b.String()), nameConst
+	}
 	return b.String(), nameConst
 }
 
 // declareNameVars declares the concatenated names string representing all the values in the runs.
-func (g *Generator) declareNameVars(runs [][]Value, typeName string, suffix string) {
-	g.Printf("const _%sName%s = \"", typeName, suffix)
+func (g *Generator) declareNameVars(runs [][]Value, typeName string, suffix string, lowercase bool) {
+	if lowercase {
+		g.Printf("const _%sNameLowercase%s = \"", typeName, suffix)
+	} else {
+		g.Printf("const _%sName%s = \"", typeName, suffix)
+	}
 	for _, run := range runs {
 		for i := range run {
-			g.Printf("%s", run[i].name)
+			if lowercase {
+				g.Printf("%s", strings.ToLower(run[i].name))
+			} else {
+				g.Printf("%s", run[i].name)
+			}
 		}
 	}
 	g.Printf("\"\n")
-}
-
-// buildOneRun generates the variables and String method for a single run of contiguous values.
-func (g *Generator) buildOneRun(runs [][]Value, typeName string) {
-	values := runs[0]
-	g.Printf("\n")
-	g.declareIndexAndNameVar(values, typeName)
-	// The generated code is simple enough to write as a Printf format.
-	lessThanZero := ""
-	if values[0].signed {
-		lessThanZero = "i < 0 || "
-	}
-	if values[0].value == 0 { // Signed or unsigned, 0 is still 0.
-		g.Printf(stringOneRun, typeName, usize(len(values)), lessThanZero)
-	} else {
-		g.Printf(stringOneRunWithOffset, typeName, values[0].String(), usize(len(values)), lessThanZero)
-	}
 }
 
 // Arguments to format are:
@@ -655,47 +645,35 @@ const stringOneRunWithOffset = `func (i %[1]s) String() string {
 }
 `
 
-// buildMultipleRuns generates the variables and String method for multiple runs of contiguous values.
-// For this pattern, a single Printf format won't do.
-func (g *Generator) buildMultipleRuns(runs [][]Value, typeName string) {
-	g.Printf("\n")
-	g.declareIndexAndNameVars(runs, typeName)
-	g.Printf("func (i %s) String() string {\n", typeName)
-	g.Printf("\tswitch {\n")
-	for i, values := range runs {
-		if len(values) == 1 {
-			g.Printf("\tcase i == %s:\n", &values[0])
-			g.Printf("\t\treturn _%sName_%d\n", typeName, i)
-			continue
-		}
-		g.Printf("\tcase %s <= i && i <= %s:\n", &values[0], &values[len(values)-1])
-		if values[0].value != 0 {
-			g.Printf("\t\ti -= %s\n", &values[0])
-		}
-		g.Printf("\t\treturn _%sName_%d[_%sIndex_%d[i]:_%sIndex_%d[i+1]]\n",
-			typeName, i, typeName, i, typeName, i)
-	}
-	g.Printf("\tdefault:\n")
-	g.Printf("\t\treturn fmt.Sprintf(\"%s(%%d)\", i)\n", typeName)
-	g.Printf("\t}\n")
-	g.Printf("}\n")
-}
-
 // buildMap handles the case where the space is so sparse a map is a reasonable fallback.
 // It's a rare situation but has simple code.
-func (g *Generator) buildMap(runs [][]Value, typeName string) {
-	g.Printf("\n")
-	g.declareNameVars(runs, typeName, "")
-	g.Printf("\nvar _%sMap = map[%s]string{\n", typeName, typeName)
-	n := 0
-	for _, values := range runs {
-		for _, value := range values {
-			g.Printf("\t%s: _%sName[%d:%d],\n", &value, typeName, n, n+len(value.name))
-			n += len(value.name)
+func (g *Generator) buildMap(runs [][]Value, typeName string, ignoreCase bool) {
+	if ignoreCase {
+		g.Printf("\n")
+		g.declareNameVars(runs, typeName, "", true)
+		g.Printf("\nvar _%sMapLowercase = map[%s]string{\n", typeName, typeName)
+		n := 0
+		for _, values := range runs {
+			for _, value := range values {
+				g.Printf("\t%s: _%sNameLowercase[%d:%d],\n", &value, typeName, n, n+len(value.name))
+				n += len(value.name)
+			}
 		}
+		g.Printf("}\n\n")
+	} else {
+		g.Printf("\n")
+		g.declareNameVars(runs, typeName, "", false)
+		g.Printf("\nvar _%sMap = map[%s]string{\n", typeName, typeName)
+		n := 0
+		for _, values := range runs {
+			for _, value := range values {
+				g.Printf("\t%s: _%sName[%d:%d],\n", &value, typeName, n, n+len(value.name))
+				n += len(value.name)
+			}
+		}
+		g.Printf("}\n\n")
+		g.Printf(stringMap, typeName)
 	}
-	g.Printf("}\n\n")
-	g.Printf(stringMap, typeName)
 }
 
 // Argument to format is the type name.
