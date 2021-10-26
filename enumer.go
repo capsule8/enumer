@@ -162,7 +162,7 @@ func (g *Generator) buildBasicExtras(runs [][]Value, typeName string, runsThresh
 	}
 
 	g.Printf(stringValuesMethod, typeName)
-	if len(runs) <= runsThreshold {
+	if len(runs) < runsThreshold {
 		g.Printf(stringBelongsMethodLoop, typeName)
 	} else { // There is a map of values, the code is simpler then
 		g.Printf(stringBelongsMethodSet, typeName)
