@@ -26,7 +26,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/pascaldekloe/name"
 	"golang.org/x/tools/go/packages"
@@ -76,7 +75,6 @@ func Usage() {
 }
 
 func main() {
-	fmt.Println("running enumer")
 	log.SetFlags(0)
 	log.SetPrefix("enumer: ")
 	flag.Usage = Usage
@@ -86,7 +84,6 @@ func main() {
 		os.Exit(2)
 	}
 	types := strings.Split(*typeNames, ",")
-	fmt.Println("types:", types)
 
 	// We accept either one directory or a list of files. Which do we have?
 	args := flag.Args()
@@ -96,8 +93,6 @@ func main() {
 	}
 
 	// Parse the package once.
-	fmt.Println("parsing package...")
-	currTime := time.Now()
 	var (
 		dir string
 		g   Generator
@@ -108,11 +103,7 @@ func main() {
 	} else {
 		dir = filepath.Dir(args[0])
 	}
-	duration := time.Now().Sub(currTime)
-	fmt.Println(duration)
 
-	fmt.Println("printing code...")
-	currTime = time.Now()
 	g.parsePackage(args)
 
 	// Print the header and package clause.
@@ -167,8 +158,6 @@ func main() {
 		log.Fatalf("writing output: %s", err)
 	}
 
-	duration = time.Now().Sub(currTime)
-	fmt.Println(duration)
 	tmpFile.Close()
 
 	// Rename tmpfile to output file
@@ -324,10 +313,6 @@ func (pkg *Package) check(fs *token.FileSet, astFiles []*ast.File) {
 	config := types.Config{Importer: importer.Default(), FakeImportC: true}
 	info := &types.Info{
 		Defs: pkg.defs,
-	}
-	fmt.Println("ast files")
-	for _, file := range astFiles {
-		fmt.Println(file.Name)
 	}
 	typesPkg, err := config.Check(pkg.dir, fs, astFiles, info)
 	if err != nil {
